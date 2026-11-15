@@ -57,6 +57,9 @@ const bar = progress ? progress.parentElement : null;
 const tNow = document.getElementById('tNow');
 const tLeft = document.getElementById('tLeft');
 
+// Status apakah user secara manual menekan jeda
+let userPaused = false;
+
 const fmt = (sec) => {
   const s = Math.max(0, Math.floor(sec || 0));
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
@@ -71,16 +74,44 @@ function render() {
   progress.style.width = d ? (audio.currentTime / d) * 100 + '%' : '0%';
   tNow.textContent = fmt(audio.currentTime);
   tLeft.textContent = '-' + fmt(d - audio.currentTime);
+
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }
 }
 
 if (audio) {
   ['play', 'pause', 'timeupdate', 'loadedmetadata', 'ended'].forEach((ev) => audio.addEventListener(ev, render));
 
+  // Informasi media untuk sistem notifikasi HP
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: 'Sunflower',
+      artist: 'Post Malone, Swae Lee'
+    });
+    navigator.mediaSession.setActionHandler('play', () => {
+      userPaused = false;
+      audio.play().catch(() => {});
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      userPaused = true;
+      audio.pause();
+    });
+  }
+
   // Coba putar otomatis saat halaman dibuka.
-  // Kalau browser menolak, lagu mulai pada sentuhan pertama di halaman.
-  audio.play().catch(() => {
+  // Kalau browser menolak (kebijakan autoplay), lagu mulai pada sentuhan pertama di layar.
+  audio.play().then(() => {
+    userPaused = false;
+  }).catch(() => {
     const unlock = (e) => {
-      if (!playBtn || !playBtn.contains(e.target)) audio.play().catch(() => { });
+      if (!playBtn || !playBtn.contains(e.target)) {
+        if (!userPaused) {
+          audio.play().then(() => {
+            userPaused = false;
+          }).catch(() => {});
+        }
+      }
       ['pointerdown', 'keydown', 'touchstart'].forEach((t) => window.removeEventListener(t, unlock, true));
     };
     ['pointerdown', 'keydown', 'touchstart'].forEach((t) => window.addEventListener(t, unlock, true));
@@ -89,12 +120,17 @@ if (audio) {
   // Tombol play/jeda
   if (playBtn) {
     playBtn.addEventListener('click', () => {
-      if (audio.paused) audio.play().catch((err) => {
-        if (audio.error || err.name === 'NotSupportedError') toast('lagu.mp3 tidak ditemukan di folder ini');
-        else toast('Ketuk tombol play sekali lagi');
-        console.warn('Gagal memutar:', err.name, err.message, audio.currentSrc);
-      });
-      else audio.pause();
+      if (audio.paused) {
+        userPaused = false;
+        audio.play().catch((err) => {
+          if (audio.error || err.name === 'NotSupportedError') toast('lagu.mp3 tidak ditemukan di folder ini');
+          else toast('Ketuk tombol play sekali lagi');
+          console.warn('Gagal memutar:', err.name, err.message, audio.currentSrc);
+        });
+      } else {
+        userPaused = true;
+        audio.pause();
+      }
     });
   }
 
@@ -165,10 +201,51 @@ if (clipVideo && clip) {
   if (clipVideo.readyState >= 2) videoSiap();
   else clipVideo.addEventListener('loadeddata', videoSiap, { once: true });
   clipVideo.addEventListener('error', () => console.warn('bg.mp4 tidak ditemukan atau formatnya tidak didukung'));
-
-  // Hemat baterai: jeda video saat tab tidak dilihat
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) clipVideo.pause(); else clipVideo.play().catch(() => { });
-  });
 }
 
+// =========================================================
+// KONTROL KELUAR / KEMBALI / MINIMIZE (INSTAGRAM & MOBILE WEBVIEW)
+// Menghentikan lagu seketika saat user menekan 'Back', menutup tab,
+// atau kembali ke Instagram feed/aplikasi lain.
+// =========================================================
+function jedaSemuaMedia() {
+  if (audio && !audio.paused) {
+    audio.pause();
+  }
+  if (clipVideo && !clipVideo.paused) {
+    clipVideo.pause();
+  }
+}
+
+function putarKembaliMedia() {
+  // Hanya putar kembali jika user sebelumnya tidak sengaja mem-pause lagu
+  if (audio && audio.paused && !userPaused) {
+    audio.play().catch(() => {});
+  }
+  if (clipVideo && clipVideo.paused) {
+    clipVideo.play().catch(() => {});
+  }
+}
+
+// 1. Saat tab/webview disembunyikan atau dibuka kembali
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    jedaSemuaMedia();
+  } else {
+    putarKembaliMedia();
+  }
+});
+
+// 2. Event saat browser ditutup / tombol 'Kembali' ditekan di Instagram WebView
+window.addEventListener('pagehide', jedaSemuaMedia);
+window.addEventListener('beforeunload', jedaSemuaMedia);
+window.addEventListener('unload', jedaSemuaMedia);
+window.addEventListener('freeze', jedaSemuaMedia);
+
+// 3. Saat aplikasi kehilangan fokus (misal notifikasi IG / kembali ke feed)
+window.addEventListener('blur', () => {
+  // Cek apakah memang tab/halaman tidak aktif
+  if (document.hidden) {
+    jedaSemuaMedia();
+  }
+});
