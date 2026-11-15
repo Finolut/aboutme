@@ -124,11 +124,11 @@ if (clipVideo && clip) {
   }
 
   function checkVideoLoop() {
-    const loopPoint = (VIDEO_LOOP_POINT > 0 && clipVideo.duration && VIDEO_LOOP_POINT < clipVideo.duration)
-      ? VIDEO_LOOP_POINT
+    const loopPoint = (VIDEO_LOOP_POINT > 0 && clipVideo.duration)
+      ? Math.min(VIDEO_LOOP_POINT, clipVideo.duration)
       : (clipVideo.duration || 0);
 
-    if (loopPoint > 0 && clipVideo.currentTime >= loopPoint) {
+    if (loopPoint > 0 && clipVideo.currentTime >= (loopPoint - 0.08)) {
       restartVideo();
     }
 
@@ -150,11 +150,11 @@ if (clipVideo && clip) {
 
   // Loop cepat saat mencapai batas animasi atau selesai
   clipVideo.addEventListener('timeupdate', () => {
-    const loopPoint = (VIDEO_LOOP_POINT > 0 && clipVideo.duration && VIDEO_LOOP_POINT < clipVideo.duration)
-      ? VIDEO_LOOP_POINT
+    const loopPoint = (VIDEO_LOOP_POINT > 0 && clipVideo.duration)
+      ? Math.min(VIDEO_LOOP_POINT, clipVideo.duration)
       : (clipVideo.duration || 0);
 
-    if (loopPoint > 0 && clipVideo.currentTime >= loopPoint) {
+    if (loopPoint > 0 && clipVideo.currentTime >= (loopPoint - 0.08)) {
       restartVideo();
     }
   });

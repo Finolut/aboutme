@@ -421,6 +421,8 @@
       display: block;
       opacity: 0;
       transition: opacity 1.2s ease;
+      transform: translateZ(0);
+      will-change: transform, opacity;
       /* video muncul pelan */
       /* atas & bawah memudar ke hitam, jadi tidak ada garis batas */
       -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 22%, #000 70%, transparent 100%);
